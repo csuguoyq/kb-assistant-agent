@@ -73,6 +73,7 @@ export async function streamChat({ question, sessionId, onChunk, onSources, onDo
         if (!line.startsWith('data:')) continue
         const payload = JSON.parse(line.slice(5).trim())
         if (payload.type === 'chunk') onChunk?.(payload.content)
+        else if (payload.type === 'tool') onTool?.(payload.name)
         else if (payload.type === 'sources') onSources?.(payload.items || [])
         else if (payload.type === 'done') onDone?.(payload.session_id)
         else if (payload.type === 'error') onError?.(payload.message)

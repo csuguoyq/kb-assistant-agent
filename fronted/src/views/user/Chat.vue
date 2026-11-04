@@ -31,7 +31,7 @@ async function send(text) {
   if (!q || sending.value) return
   question.value = ''
   sending.value = true
-  const assistant = { role: 'assistant', content: '', sources: [] }
+  const assistant = { role: 'assistant', content: '', sources: [], status: '' }
   messages.push({ role: 'user', content: q })
   messages.push(assistant)
   scrollBottom()
@@ -39,7 +39,8 @@ async function send(text) {
   await streamChat({
     question: q,
     sessionId: sessionId,
-    onChunk: (t) => { assistant.content += t; scrollBottom() },
+    onChunk: (t) => { assistant.status = ''; assistant.content += t; scrollBottom() },
+    onTool: (name) => { assistant.status = `🔍 正在调用工具：${name}…`; scrollBottom() },
     onSources: (items) => { assistant.sources = items },
     onDone: (sid) => { store.state.sessionId = sid },
     onError: (msg) => {
@@ -94,7 +95,7 @@ onMounted(async () => {
           <div class="bubble">
             <div v-if="m.role === 'assistant'" class="content md" v-html="renderMd(m.content)"></div>
             <div v-else class="content">{{ m.content }}<span v-if="sending && i === messages.length - 1" class="cursor">▍</span></div>
-            <div v-if="m.role === 'assistant' && !m.content" class="content typing">正在思考…</div>
+            <div v-if="m.role === 'assistant' && !m.content" class="content typing">{{ m.status || '正在思考…' }}</div>
             <div v-if="m.sources && m.sources.length" class="sources">
               <div class="sources-title">📎 引用来源</div>
               <div v-for="s in m.sources" :key="s.article_id" class="source-item" @click="goArticle(s.article_id)">

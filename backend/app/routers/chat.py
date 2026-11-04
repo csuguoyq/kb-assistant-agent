@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,8 @@ from app.agent.tools import sources_collector
 from app.database import get_db, SessionLocal
 from app.models.chat import ChatSession, ChatMessage
 from app.models.user import User
+from app.prompts import build_context_block
+from app.services import rag
 from app.utils.deps import get_current_user, get_current_editor
 from app.utils.response import success
 
@@ -62,23 +65,47 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
         db.close()
 
     def event_stream():
-        sources = []
+        # 强制预检索（Context Engineering）：每个问题先静默检索一次，
+        # 结果注入上下文，模型只需决定"用不用"，不依赖它决定"查不查"
+        try:
+            hits = rag.search(payload.question)
+        except Exception:
+            logger.exception("预检索失败（Embedding 服务不可用？），降级为纯对话")
+            hits = []
+        sources = [{
+            "article_id": h["article_id"],
+            "title": h["title"],
+            "snippet": h["text"][:120],
+        } for h in hits]
         sources_collector.set(sources)
+
+        context_message = SystemMessage(content=build_context_block(hits)) if hits else None
         config = {"configurable": {"thread_id": session_id, "user_id": current_user.id}}
         answer_parts = []
         try:
-            from langchain_core.messages import AIMessageChunk, HumanMessage
-            for chunk, meta in kb_graph.stream(
-                {"messages": [HumanMessage(content=payload.question)]},
+            input_messages = [HumanMessage(content=payload.question)]
+            if context_message:
+                input_messages.append(context_message)
+            for mode, data in kb_graph.stream(
+                {"messages": input_messages},
                 config=config,
-                stream_mode="messages",
+                stream_mode=["messages", "updates"],
             ):
-                if isinstance(chunk, AIMessageChunk) and chunk.content and meta.get("langgraph_node") == "agent":
-                    text = chunk.content if isinstance(chunk.content, str) else "".join(
-                        p.get("text", "") for p in chunk.content if isinstance(p, dict))
-                    if text:
-                        answer_parts.append(text)
-                        yield f"data: {json.dumps({'type': 'chunk', 'content': text}, ensure_ascii=False)}\n\n"
+                if mode == "messages":
+                    chunk, meta = data
+                    if isinstance(chunk, AIMessageChunk) and chunk.content:
+                        text = chunk.content if isinstance(chunk.content, str) else "".join(
+                            p.get("text", "") for p in chunk.content if isinstance(p, dict))
+                        if text:
+                            answer_parts.append(text)
+                            yield f"data: {json.dumps({'type': 'chunk', 'content': text}, ensure_ascii=False)}\n\n"
+                    continue
+                # mode == "updates"：工具节点被执行时向前端广播检索状态
+                for node_name, update in data.items():
+                    if node_name == "tools":
+                        for msg in update.get("messages", []):
+                            if isinstance(msg, ToolMessage):
+                                yield f"data: {json.dumps({'type': 'tool', 'name': msg.name}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'sources', 'items': sources}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 
