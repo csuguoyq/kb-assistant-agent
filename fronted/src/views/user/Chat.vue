@@ -1,16 +1,16 @@
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { streamChat, apiFetch } from '../../api/request'
 import { useAuth } from '../../composables/useAuth'
+import { useChatStore } from '../../composables/useChat'
 
-const router = useRouter()
 const auth = useAuth()
+const store = useChatStore()
 
 const question = ref('')
 const sending = ref(false)
-const sessionId = ref('')
-const messages = ref([])   // { role, content, sources }
+const sessionId = store.state.sessionId
+const messages = store.state.messages
 const listEl = ref(null)
 
 const suggestions = ['年假有几天？怎么申请？', '出差报销标准是什么？', 'VPN 怎么申请？', '迟到会怎么处理？']
@@ -24,19 +24,19 @@ async function send(text) {
   if (!q || sending.value) return
   question.value = ''
   sending.value = true
-  const assistant = ref({ role: 'assistant', content: '', sources: [] })
-  messages.value.push({ role: 'user', content: q })
-  messages.value.push(assistant.value)
+  const assistant = { role: 'assistant', content: '', sources: [] }
+  messages.push({ role: 'user', content: q })
+  messages.push(assistant)
   scrollBottom()
 
   await streamChat({
     question: q,
-    sessionId: sessionId.value,
-    onChunk: (t) => { assistant.value.content += t; scrollBottom() },
-    onSources: (items) => { assistant.value.sources = items },
-    onDone: (sid) => { sessionId.value = sid },
+    sessionId: sessionId,
+    onChunk: (t) => { assistant.content += t; scrollBottom() },
+    onSources: (items) => { assistant.sources = items },
+    onDone: (sid) => { store.state.sessionId = sid },
     onError: (msg) => {
-      if (!assistant.value.content) assistant.value.content = `⚠️ ${msg}`
+      if (!assistant.content) assistant.content = `⚠️ ${msg}`
     },
   })
   sending.value = false
@@ -45,21 +45,24 @@ async function send(text) {
 
 async function openSession(session) {
   const detail = await apiFetch(`/api/chat/sessions/${session.id}`)
-  sessionId.value = session.id
-  messages.value = detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources }))
+  store.state.sessionId = session.id
+  messages.splice(0, messages.length, ...detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources })))
   scrollBottom()
 }
 
 function newChat() {
-  sessionId.value = ''
-  messages.value = []
+  store.newChat()
 }
 
 function goArticle(id) {
   window.open(`${location.origin}/user/articles?id=${id}`, '_blank')
 }
 
-onMounted(newChat)
+onMounted(async () => {
+  if (!messages.length) {
+    try { await store.restoreLatest(); scrollBottom() } catch { /* 忽略恢复失败 */ }
+  }
+})
 </script>
 
 <template>
