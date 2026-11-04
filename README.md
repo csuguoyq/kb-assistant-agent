@@ -8,13 +8,13 @@
 
 ## 界面预览
 
-| AI 知识问答（带引用溯源） | 文章管理（分类/状态/导入） |
+| AI 知识问答（带引用溯源） | 点击引用弹出原文 |
 |---|---|
-| ![AI 知识问答](docs/images/02-chat-qa.png) | ![文章管理](docs/images/04-admin-articles.png) |
+| ![AI 知识问答](docs/images/02-chat-qa.png) | ![引用弹框](docs/images/05-citation-modal.png) |
 
-| 管理端概览 | 登录 |
+| 管理端概览 | 文章管理 |
 |---|---|
-| ![管理端概览](docs/images/03-admin-dashboard.png) | ![登录](docs/images/01-login.png) |
+| ![管理端概览](docs/images/03-admin-dashboard.png) | ![文章管理](docs/images/04-admin-articles.png) |
 
 ## 核心能力
 

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
@@ -16,9 +17,20 @@ from app.seed import init_seed_data
 logger = logging.getLogger("app")
 
 
+def _ensure_schema_columns() -> None:
+    """对已存在的表幂等补齐新增列（无 alembic 的轻量自迁移）。"""
+    insp = inspect(engine)
+    if insp.has_table("chat_messages"):
+        existing = {c["name"] for c in insp.get_columns("chat_messages")}
+        if "duration_ms" not in existing:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN duration_ms INTEGER"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_columns()
     db = SessionLocal()
     try:
         for username, email, password, role, name in [

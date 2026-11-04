@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue'
+import { ref, reactive, nextTick, onMounted, computed } from 'vue'
 import { marked } from 'marked'
 import { streamChat, apiFetch } from '../../api/request'
 import { useAuth } from '../../composables/useAuth'
@@ -38,7 +38,8 @@ async function send(text) {
     store.state.sessionId = crypto.randomUUID().replaceAll('-', '')
   }
   const startedAt = Date.now()
-  const assistant = { role: 'assistant', content: '', sources: [], status: '', elapsed: '' }
+  // 必须 reactive：push 后代码里改的是这个引用本身，普通对象的变化不会触发视图更新
+  const assistant = reactive({ role: 'assistant', content: '', sources: [], status: '', elapsed: '' })
   messages.push({ role: 'user', content: q })
   messages.push(assistant)
   scrollBottom()
@@ -54,9 +55,9 @@ async function send(text) {
     },
     onTool: (name) => { assistant.status = `🔍 正在调用工具：${name}…`; scrollBottom() },
     onSources: (items) => { assistant.sources = items },
-    onDone: (sid) => {
+    onDone: (sid, durationMs) => {
       store.state.sessionId = sid
-      assistant.elapsed = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+      assistant.elapsed = durationMs ? `${(durationMs / 1000).toFixed(1)}s` : assistant.elapsed
     },
     onError: (msg) => {
       assistant.elapsed = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
@@ -72,7 +73,10 @@ async function send(text) {
 async function openSession(session) {
   const detail = await apiFetch(`/api/chat/sessions/${session.id}`)
   store.state.sessionId = session.id
-  messages.splice(0, messages.length, ...detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources })))
+  messages.splice(0, messages.length, ...detail.map((m) => ({
+    role: m.role, content: m.content, sources: m.sources,
+    elapsed: m.duration_ms ? `${(m.duration_ms / 1000).toFixed(1)}s` : '',
+  })))
   scrollBottom()
 }
 

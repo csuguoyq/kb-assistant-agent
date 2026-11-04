@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,12 +29,14 @@ class ChatRequest(BaseModel):
     session_id: str = ""
 
 
-def _save_message(db: Session, session_id: str, role: str, content: str, sources: list | None = None):
+def _save_message(db: Session, session_id: str, role: str, content: str,
+                  sources: list | None = None, duration_ms: int | None = None):
     message = ChatMessage(
         session_id=session_id,
         role=role,
         content=content,
         sources=json.dumps(sources, ensure_ascii=False) if sources else None,
+        duration_ms=duration_ms,
     )
     db.add(message)
     db.commit()
@@ -51,6 +54,7 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="问题不能为空")
 
     session_id = payload.session_id or uuid.uuid4().hex
+    started_at = time.time()
     db = SessionLocal()
     try:
         session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -140,12 +144,13 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
             total = len(sources)
             cited = {int(m) for m in re.findall(r"\[(\d{1,2})\]", answer) if int(m) <= total}
             used_sources = [s for i, s in enumerate(sources, 1) if i in cited]
+            duration_ms = int((time.time() - started_at) * 1000)
             yield f"data: {json.dumps({'type': 'sources', 'items': used_sources}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'duration_ms': duration_ms})}\n\n"
 
             db = SessionLocal()
             try:
-                _save_message(db, session_id, "assistant", answer, used_sources)
+                _save_message(db, session_id, "assistant", answer, used_sources, duration_ms)
             finally:
                 db.close()
         except Exception as e:
@@ -183,6 +188,7 @@ def session_messages(session_id: str, current_user: User = Depends(get_current_u
         "role": m.role,
         "content": m.content,
         "sources": m.sources_list,
+        "duration_ms": m.duration_ms,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     } for m in session.messages])
 

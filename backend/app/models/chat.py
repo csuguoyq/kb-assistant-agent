@@ -27,6 +27,8 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     # 引用来源：JSON 数组 [{article_id, title, snippet}]
     sources = Column(Text, nullable=True)
+    # 回答耗时（毫秒），仅 assistant 消息有
+    duration_ms = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     session = relationship("ChatSession", back_populates="messages")

@@ -31,7 +31,12 @@ async function loadSessionById(id) {
   state.sessionId = id
   // 原地填充：聊天页持有的是该数组的引用，整体赋值会导致界面不更新
   state.messages.splice(0, state.messages.length,
-    ...detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources })))
+    ...detail.map((m) => ({
+      role: m.role,
+      content: m.content,
+      sources: m.sources,
+      elapsed: m.duration_ms ? `${(m.duration_ms / 1000).toFixed(1)}s` : '',
+    })))
 }
 
 export function useChatStore() {

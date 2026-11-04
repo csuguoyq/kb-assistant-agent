@@ -75,7 +75,7 @@ export async function streamChat({ question, sessionId, onChunk, onTool, onSourc
         if (payload.type === 'chunk') onChunk?.(payload.content)
         else if (payload.type === 'tool') onTool?.(payload.name)
         else if (payload.type === 'sources') onSources?.(payload.items || [])
-        else if (payload.type === 'done') onDone?.(payload.session_id)
+        else if (payload.type === 'done') onDone?.(payload.session_id, payload.duration_ms)
         else if (payload.type === 'error') onError?.(payload.message)
       }
     }
