@@ -1,11 +1,35 @@
 <script setup>
-import { ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useChatStore } from '../composables/useChat'
+import { apiFetch } from '../api/request'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuth()
+const chat = useChatStore()
 const menuOpen = ref(false)
+
+const recentSessions = ref([])
+
+async function loadRecent() {
+  try {
+    const sessions = await apiFetch('/api/chat/sessions')
+    recentSessions.value = sessions.slice(0, 5)
+  } catch {
+    recentSessions.value = []
+  }
+}
+
+async function openSession(s) {
+  await chat.loadSessionById(s.id)
+  router.push('/user/chat')
+  closeMenu()
+}
+
+// 进入问答页后刷新最近会话列表（新提问会出现在最上面）
+watch(() => route.path, (p) => { if (p === '/user/chat') loadRecent() }, { immediate: true })
 
 // 普通用户（user）：只能使用知识库
 const userNav = [
@@ -60,6 +84,12 @@ function closeMenu() {
         <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="nav-item" @click="closeMenu">
           <span>{{ item.icon }}</span>{{ item.label }}
         </router-link>
+        <template v-if="group.label === '使用知识库' && recentSessions.length">
+          <div class="group-label" style="margin-top: 6px">🕘 最近会话</div>
+          <a v-for="s in recentSessions" :key="s.id" class="nav-item session-item" :title="s.title" @click="openSession(s)">
+            {{ s.title || '（无标题）' }}
+          </a>
+        </template>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/user/profile" class="nav-item" @click="closeMenu"><span>👤</span>个人中心</router-link>
@@ -85,6 +115,11 @@ function closeMenu() {
 }
 .nav-item:hover { background: #2a3245; color: #fff; }
 .nav-item.router-link-active { background: var(--primary); color: #fff; }
+.session-item {
+  font-size: 12px; color: #9aa2b8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+.session-item:hover { color: #fff; }
 .sidebar-footer { margin-top: auto; }
 .role-badge { font-size: 12px; color: #6a7288; padding: 10px 12px; }
 .main { flex: 1; padding: 24px; min-width: 0; }

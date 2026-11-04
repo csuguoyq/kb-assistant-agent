@@ -136,12 +136,10 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
                     db.close()
             sources = [s for s in sources if s["article_id"] is not None]
 
-            # 只保留 LLM 实际引用的来源：从回答解析 [n]，无效编号回退为全部命中
+            # 只保留 LLM 实际引用的来源：回答里没有 [n]（闲聊/未引用）则为空
             total = len(sources)
             cited = {int(m) for m in re.findall(r"\[(\d{1,2})\]", answer) if int(m) <= total}
-            used_sources = (
-                [s for i, s in enumerate(sources, 1) if i in cited] if cited else list(sources)
-            )
+            used_sources = [s for i, s in enumerate(sources, 1) if i in cited]
             yield f"data: {json.dumps({'type': 'sources', 'items': used_sources}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 

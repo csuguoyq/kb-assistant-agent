@@ -28,6 +28,8 @@ a { color: var(--primary); text-decoration: none; }
   cursor: pointer;
   font-size: 14px;
   transition: all .15s;
+  white-space: nowrap;   /* 按钮文字不换行 */
+  flex-shrink: 0;
 }
 .btn:hover { border-color: var(--primary); color: var(--primary); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }

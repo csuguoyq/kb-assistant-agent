@@ -89,7 +89,7 @@ onMounted(() => {
 
     <div v-if="items.length === 0" class="empty">暂无文章，点击右上角新建</div>
     <table v-else class="table">
-      <thead><tr><th>标题</th><th>分类</th><th>状态</th><th>标签</th><th>更新时间</th><th style="width:230px">操作</th></tr></thead>
+      <thead><tr><th>标题</th><th>分类</th><th>状态</th><th>标签</th><th>更新时间</th><th style="width:280px; white-space:nowrap">操作</th></tr></thead>
       <tbody>
         <tr v-for="a in items" :key="a.id">
           <td>{{ a.title }}</td>

@@ -16,9 +16,9 @@ const store = useChatStore()
 
 const question = ref('')
 const sending = ref(false)
-const sessionId = store.state.sessionId
-const messages = store.state.messages
+const messages = store.state.messages  // 数组引用安全；sessionId 是原始值，禁止拷贝，须读 store
 const listEl = ref(null)
+const inputEl = ref(null)
 
 const suggestions = ['年假有几天？怎么申请？', '出差报销标准是什么？', 'VPN 怎么申请？', '迟到会怎么处理？']
 
@@ -31,24 +31,42 @@ async function send(text) {
   if (!q || sending.value) return
   question.value = ''
   sending.value = true
-  const assistant = { role: 'assistant', content: '', sources: [], status: '' }
+  // 等待历史恢复完成再确定会话 ID，避免恢复期间提问导致一问一会话
+  await store.restoreLatest()
+  // 首问立即确定会话 ID：后续提问/刷新都复用它，避免一问一会话的碎片
+  if (!store.state.sessionId) {
+    store.state.sessionId = crypto.randomUUID().replaceAll('-', '')
+  }
+  const startedAt = Date.now()
+  const assistant = { role: 'assistant', content: '', sources: [], status: '', elapsed: '' }
   messages.push({ role: 'user', content: q })
   messages.push(assistant)
   scrollBottom()
 
   await streamChat({
     question: q,
-    sessionId: sessionId,
-    onChunk: (t) => { assistant.status = ''; assistant.content += t; scrollBottom() },
+    sessionId: store.state.sessionId,
+    onChunk: (t) => {
+      if (!assistant.content) assistant.elapsed = `${((Date.now() - startedAt) / 1000).toFixed(1)}s 首字`
+      assistant.status = ''
+      assistant.content += t
+      scrollBottom()
+    },
     onTool: (name) => { assistant.status = `🔍 正在调用工具：${name}…`; scrollBottom() },
     onSources: (items) => { assistant.sources = items },
-    onDone: (sid) => { store.state.sessionId = sid },
+    onDone: (sid) => {
+      store.state.sessionId = sid
+      assistant.elapsed = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+    },
     onError: (msg) => {
+      assistant.elapsed = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
       if (!assistant.content) assistant.content = `⚠️ ${msg}`
     },
   })
   sending.value = false
   scrollBottom()
+  // 等 Vue 把 disabled 属性移除后再聚焦，否则 focus 会静默失败
+  nextTick(() => inputEl.value?.focus())
 }
 
 async function openSession(session) {
@@ -62,8 +80,19 @@ function newChat() {
   store.newChat()
 }
 
-function goArticle(id) {
-  window.open(`${location.origin}/user/articles?id=${id}`, '_blank')
+// 点击引用来源：弹框显示文章全文，不再跳转页面
+const sourceArticle = ref(null)
+const loadingSource = ref(false)
+
+async function openSource(s) {
+  loadingSource.value = true
+  try {
+    sourceArticle.value = await apiFetch(`/api/articles/public/${s.article_id}`)
+  } catch (e) {
+    alert(`无法打开文章：${e.message}`)
+  } finally {
+    loadingSource.value = false
+  }
 }
 
 onMounted(async () => {
@@ -96,9 +125,10 @@ onMounted(async () => {
             <div v-if="m.role === 'assistant'" class="content md" v-html="renderMd(m.content)"></div>
             <div v-else class="content">{{ m.content }}<span v-if="sending && i === messages.length - 1" class="cursor">▍</span></div>
             <div v-if="m.role === 'assistant' && !m.content" class="content typing">{{ m.status || '正在思考…' }}</div>
+            <div v-if="m.role === 'assistant' && m.elapsed && m.content" class="meta">⏱ {{ m.elapsed }}</div>
             <div v-if="m.sources && m.sources.length" class="sources">
-              <div class="sources-title">📎 引用来源</div>
-              <div v-for="s in m.sources" :key="s.article_id" class="source-item" @click="goArticle(s.article_id)">
+              <div class="sources-title">📎 引用来源（点击查看原文）</div>
+              <div v-for="s in m.sources" :key="s.article_id" class="source-item" @click="openSource(s)">
                 《{{ s.title }}》
               </div>
             </div>
@@ -107,9 +137,19 @@ onMounted(async () => {
       </div>
 
       <form class="chat-input" @submit.prevent="send()">
-        <input v-model="question" class="input" placeholder="输入你的问题，例如：年假有几天？" :disabled="sending" />
+        <input ref="inputEl" v-model="question" class="input" placeholder="输入你的问题，例如：年假有几天？" :disabled="sending" />
         <button class="btn primary" :disabled="sending || !question.trim()">{{ sending ? '思考中...' : '发送' }}</button>
       </form>
+    </div>
+
+    <div v-if="sourceArticle || loadingSource" class="modal-mask" @click.self="sourceArticle = null">
+      <div class="card modal">
+        <div class="page-header">
+          <h3>{{ loadingSource ? '加载中…' : sourceArticle.title }}</h3>
+          <button class="btn" @click="sourceArticle = null">关闭</button>
+        </div>
+        <div class="modal-body" style="white-space: pre-wrap; line-height: 1.8">{{ sourceArticle?.content }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -157,9 +197,14 @@ onMounted(async () => {
 @keyframes blink { 50% { opacity: 0; } }
 
 .sources { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
+.meta { margin-top: 6px; font-size: 12px; color: var(--text-light); text-align: right; }
 .sources-title { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
 .source-item { font-size: 13px; color: var(--primary); cursor: pointer; padding: 2px 0; }
 .source-item:hover { text-decoration: underline; }
 
 .chat-input { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal { width: min(760px, 92vw); max-height: 82vh; display: flex; flex-direction: column; }
+.modal-body { overflow-y: auto; }
 </style>

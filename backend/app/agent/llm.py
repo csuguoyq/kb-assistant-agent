@@ -14,4 +14,6 @@ def get_llm() -> ChatOpenAI:
         base_url=settings.GLM_BASE_URL,
         temperature=0.3,
         streaming=True,
+        # 推理模型（如 glm-5.3-flash）默认先思考再回答，问答场景关闭以降低延迟
+        extra_body={"thinking": {"type": settings.LLM_THINKING}},
     )

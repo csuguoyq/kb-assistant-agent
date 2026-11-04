@@ -9,19 +9,31 @@ const state = reactive({
 
 function newChat() {
   state.sessionId = ''
-  state.messages = []
+  state.messages.splice(0, state.messages.length)  // 原地清空，保持引用不变
 }
 
-async function restoreLatest() {
-  if (state.messages.length) return
-  const sessions = await apiFetch('/api/chat/sessions')
-  if (sessions.length) {
-    const detail = await apiFetch(`/api/chat/sessions/${sessions[0].id}`)
-    state.sessionId = sessions[0].id
-    state.messages = detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources }))
+let restorePromise = null
+
+function restoreLatest() {
+  // 只触发一次，后续调用复用同一个 Promise：提问前能等待恢复完成，避免竞态开新会话
+  if (!restorePromise) {
+    restorePromise = (async () => {
+      if (state.messages.length) return
+      const sessions = await apiFetch('/api/chat/sessions')
+      if (sessions.length) await loadSessionById(sessions[0].id)
+    })()
   }
+  return restorePromise
+}
+
+async function loadSessionById(id) {
+  const detail = await apiFetch(`/api/chat/sessions/${id}`)
+  state.sessionId = id
+  // 原地填充：聊天页持有的是该数组的引用，整体赋值会导致界面不更新
+  state.messages.splice(0, state.messages.length,
+    ...detail.map((m) => ({ role: m.role, content: m.content, sources: m.sources })))
 }
 
 export function useChatStore() {
-  return { state, newChat, restoreLatest }
+  return { state, newChat, restoreLatest, loadSessionById }
 }

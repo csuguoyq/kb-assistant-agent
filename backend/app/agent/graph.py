@@ -38,7 +38,9 @@ def _build_system_message() -> SystemMessage:
 
 def agent_node(state: AgentState):
     messages = state["messages"]
-    if not any(isinstance(m, SystemMessage) for m in messages):
+    # 主系统提示词（角色/日期/防幻觉规则）必须始终存在；
+    # 检索上下文块也是 SystemMessage，不能作为"已有系统提示"的判断依据
+    if not messages or not (isinstance(messages[0], SystemMessage) and messages[0].content.startswith("你是公司智能知识库助手")):
         messages = [_build_system_message()] + messages
     response = get_llm().bind_tools(ALL_TOOLS).invoke(messages)
     return {"messages": [response]}

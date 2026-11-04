@@ -26,6 +26,8 @@ class Settings:
     GLM_API_KEY: str = os.getenv("GLM_API_KEY", "")
     GLM_BASE_URL: str = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
     GLM_MODEL: str = os.getenv("GLM_MODEL", "glm-5.3-flash")
+    # 推理模型思考开关：disabled 显著降低首字延迟（问答场景建议 disabled）
+    LLM_THINKING: str = os.getenv("LLM_THINKING", "disabled")
 
     # 硅基流动：BGE 向量嵌入（OpenAI 兼容接口）
     SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "")
