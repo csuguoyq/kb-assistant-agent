@@ -4,6 +4,8 @@
 
 > 技术栈覆盖：FastAPI · LangGraph Workflow · Function Calling / Tool Calling · RAG（结构感知切片 + Chroma + BGE 嵌入 + 相关性阈值过滤）· Prompt / Context Engineering · SSE 流式输出 · JWT 多角色权限 · Docker 部署
 
+📚 **新手教程**：[docs/TUTORIAL.md](docs/TUTORIAL.md) —— 从零到一 15 步还原整个项目的搭建过程，每步含原理讲解、核心代码与验证方式，附真实踩坑清单。
+
 ## 界面预览
 
 | AI 知识问答（带引用溯源） | 文章管理（分类/状态/导入） |
