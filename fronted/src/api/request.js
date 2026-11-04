@@ -46,7 +46,7 @@ export async function apiFetch(path, options = {}) {
  * SSE 流式问答：POST /api/chat/ask
  * onChunk(text) / onSources(items) / onDone(sessionId) / onError(message)
  */
-export async function streamChat({ question, sessionId, onChunk, onSources, onDone, onError }) {
+export async function streamChat({ question, sessionId, onChunk, onTool, onSources, onDone, onError }) {
   const token = localStorage.getItem('token')
   try {
     const resp = await fetch(`${API_BASE}/api/chat/ask`, {
