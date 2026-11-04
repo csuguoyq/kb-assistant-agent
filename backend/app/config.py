@@ -25,7 +25,7 @@ class Settings:
     # 智谱 GLM：问答生成 LLM（OpenAI 兼容接口，也兼容 Z.ai Coding Plan 的 base_url）
     GLM_API_KEY: str = os.getenv("GLM_API_KEY", "")
     GLM_BASE_URL: str = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
-    GLM_MODEL: str = os.getenv("GLM_MODEL", "glm-4.6")
+    GLM_MODEL: str = os.getenv("GLM_MODEL", "glm-5.3-flash")
 
     # 硅基流动：BGE 向量嵌入（OpenAI 兼容接口）
     SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "")
