@@ -1,0 +1,78 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary: #4f6ef7;
+  --primary-dark: #3b56d9;
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --border: #e4e8f0;
+  --text: #23293a;
+  --text-light: #7a8199;
+}
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+a { color: var(--primary); text-decoration: none; }
+
+.btn {
+  display: inline-block;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .15s;
+}
+.btn:hover { border-color: var(--primary); color: var(--primary); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn.primary:hover { background: var(--primary-dark); }
+.btn.danger { color: #e05252; }
+.btn.danger:hover { border-color: #e05252; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.input, select.input, textarea.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: var(--card);
+  font-family: inherit;
+}
+.input:focus { border-color: var(--primary); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #eef1fe;
+  color: var(--primary);
+}
+.tag.gray { background: #f0f2f5; color: var(--text-light); }
+.tag.green { background: #e6f7ec; color: #2ba05f; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.table th { color: var(--text-light); font-weight: 500; font-size: 13px; }
+
+.pagination { display: flex; gap: 8px; align-items: center; margin-top: 16px; justify-content: flex-end; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.page-header h2 { font-size: 20px; }
+
+.empty { text-align: center; color: var(--text-light); padding: 40px 0; }

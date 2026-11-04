@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - kb_chroma:/app/chroma_data   # 向量库持久化
+      - kb_sqlite:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/kb.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./fronted
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  kb_chroma:
+  kb_sqlite:
