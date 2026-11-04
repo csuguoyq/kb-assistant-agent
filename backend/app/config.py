@@ -22,9 +22,10 @@ class Settings:
     DEFAULT_EDITOR_USERNAME: str = os.getenv("DEFAULT_EDITOR_USERNAME", "editor")
     DEFAULT_EDITOR_PASSWORD: str = os.getenv("DEFAULT_EDITOR_PASSWORD", "editor123")
 
-    # DeepSeek：问答生成 LLM
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
-    DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    # 智谱 GLM：问答生成 LLM（OpenAI 兼容接口，也兼容 Z.ai Coding Plan 的 base_url）
+    GLM_API_KEY: str = os.getenv("GLM_API_KEY", "")
+    GLM_BASE_URL: str = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+    GLM_MODEL: str = os.getenv("GLM_MODEL", "glm-4.6")
 
     # 硅基流动：BGE 向量嵌入（OpenAI 兼容接口）
     SILICONFLOW_API_KEY: str = os.getenv("SILICONFLOW_API_KEY", "")

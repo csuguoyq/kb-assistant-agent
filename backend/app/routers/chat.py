@@ -89,7 +89,7 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
                 db.close()
         except Exception as e:
             logger.exception("问答流异常: %s", e)
-            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 服务异常，请稍后重试（请检查 DEEPSEEK_API_KEY / SILICONFLOW_API_KEY 配置）'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 服务异常，请稍后重试（请检查 GLM_API_KEY / SILICONFLOW_API_KEY 配置）'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

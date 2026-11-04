@@ -1,16 +1,17 @@
-"""LLM 客户端：DeepSeek Chat，供 LangGraph 智能体使用。"""
+"""LLM 客户端：智谱 GLM（OpenAI 兼容接口），供 LangGraph 智能体使用。"""
 from functools import lru_cache
 
-from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI
 
 from app.config import settings
 
 
 @lru_cache
-def get_llm() -> ChatDeepSeek:
-    return ChatDeepSeek(
-        model=settings.DEEPSEEK_MODEL,
-        api_key=settings.DEEPSEEK_API_KEY,
+def get_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model=settings.GLM_MODEL,
+        api_key=settings.GLM_API_KEY,
+        base_url=settings.GLM_BASE_URL,
         temperature=0.3,
         streaming=True,
     )
