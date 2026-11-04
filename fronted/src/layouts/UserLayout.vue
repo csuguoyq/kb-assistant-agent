@@ -7,6 +7,7 @@ const route = useRoute()
 const auth = useAuth()
 const menuOpen = ref(false)
 
+// 普通用户（user）：只能使用知识库
 const userNav = [
   {
     label: '使用知识库',
@@ -18,7 +19,8 @@ const userNav = [
   },
 ]
 
-const adminNav = [
+// 知识编辑 / 管理员：使用 + 管理（admin 额外有用户管理）
+const staffNav = [
   {
     label: '使用知识库',
     items: [
@@ -37,8 +39,7 @@ const adminNav = [
   },
 ]
 
-const isAdmin = route.path.startsWith('/admin')
-const navs = isAdmin ? adminNav : userNav
+const navs = auth.isEditor() ? staffNav : userNav
 
 function closeMenu() {
   menuOpen.value = false
@@ -49,13 +50,11 @@ function closeMenu() {
   <div class="layout">
     <div class="mobile-topbar">
       <span class="logo-mini">🧠 知识库</span>
-      <span class="side-mode">{{ isAdmin ? '管理端' : '问答端' }}</span>
       <button class="btn menu-btn" @click="menuOpen = !menuOpen">☰</button>
     </div>
     <div v-if="menuOpen" class="mask" @click="menuOpen = false"></div>
     <aside class="sidebar" :class="{ open: menuOpen }">
       <div class="logo">🧠 公司知识库</div>
-      <div class="side-banner">{{ isAdmin ? '🛠️ 管理端 · 管理知识库' : '💬 问答端 · 使用知识库' }}</div>
       <nav v-for="group in navs" :key="group.label">
         <div class="group-label">{{ group.label }}</div>
         <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="nav-item" @click="closeMenu">
@@ -64,11 +63,8 @@ function closeMenu() {
       </nav>
       <div class="sidebar-footer">
         <router-link to="/user/profile" class="nav-item" @click="closeMenu"><span>👤</span>个人中心</router-link>
-        <a v-if="auth.isEditor()" class="nav-item" @click.prevent="$router.push(isAdmin ? '/user/chat' : '/admin/dashboard'); closeMenu()">
-          <span>{{ isAdmin ? '💬' : '🛠️' }}</span>{{ isAdmin ? '切换到问答端' : '切换到管理端' }}
-        </a>
         <a class="nav-item" @click.prevent="auth.logout(); $router.push('/login')"><span>🚪</span>退出登录</a>
-        <div class="role-badge">{{ auth.state.user?.name || auth.state.user?.username }}（{{ auth.role() }}）</div>
+        <div class="role-badge">{{ auth.state.user?.name || auth.state.user?.username }}（{{ auth.role() === 'admin' ? '管理员' : auth.role() === 'editor' ? '知识编辑' : '用户' }}）</div>
       </div>
     </aside>
     <main class="main"><router-view /></main>
@@ -81,11 +77,7 @@ function closeMenu() {
   width: 220px; background: #1e2433; color: #c8cede;
   display: flex; flex-direction: column; padding: 16px 12px; position: sticky; top: 0; height: 100vh;
 }
-.logo { font-size: 17px; font-weight: 600; color: #fff; padding: 8px 12px 10px; }
-.side-banner {
-  font-size: 12px; color: #fff; background: #2a3245; border-radius: 8px;
-  padding: 8px 12px; margin: 0 0 6px; text-align: center;
-}
+.logo { font-size: 17px; font-weight: 600; color: #fff; padding: 8px 12px 14px; }
 .group-label { font-size: 12px; color: #6a7288; padding: 14px 12px 6px; }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
@@ -106,7 +98,6 @@ function closeMenu() {
     background: #1e2433; color: #fff; padding: 10px 14px;
   }
   .logo-mini { font-weight: 600; }
-  .side-mode { font-size: 12px; background: #2a3245; border-radius: 999px; padding: 3px 10px; }
   .menu-btn { background: transparent; border-color: #3a4358; color: #fff; padding: 5px 12px; }
   .mask { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 14; }
   .sidebar {
