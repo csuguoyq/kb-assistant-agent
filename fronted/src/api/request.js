@@ -2,8 +2,6 @@ const API_BASE = 'http://127.0.0.1:8001'
 
 export { API_BASE }
 
-export { API_BASE, uploadFile }
-
 /** multipart 文件上传（导入文档） */
 export async function uploadFile(path, file, fields = {}) {
   const token = localStorage.getItem('token')
