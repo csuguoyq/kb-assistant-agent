@@ -2,6 +2,26 @@ const API_BASE = 'http://127.0.0.1:8001'
 
 export { API_BASE }
 
+export { API_BASE, uploadFile }
+
+/** multipart 文件上传（导入文档） */
+export async function uploadFile(path, file, fields = {}) {
+  const token = localStorage.getItem('token')
+  const form = new FormData()
+  form.append('file', file)
+  for (const [k, v] of Object.entries(fields)) form.append(k, v)
+  const resp = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: token ? `Bearer ${token}` : '' },
+    body: form,
+  })
+  const json = await resp.json().catch(() => null)
+  if (!resp.ok || (json && json.code !== 200)) {
+    throw new Error((json && json.message) || `上传失败（${resp.status}）`)
+  }
+  return json
+}
+
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token')
   const headers = { ...(options.headers || {}) }

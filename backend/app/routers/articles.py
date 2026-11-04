@@ -1,15 +1,16 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, Form
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.database import get_db, SessionLocal
+from app.database import get_db
 from app.models.article import Article
 from app.models.category import Category
 from app.models.user import User
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleListItem
 from app.services import rag
+from app.services.doc_parser import extract_text, ALLOWED_EXTENSIONS
 from app.utils.deps import get_current_editor, get_current_user
 from app.utils.response import success
 
@@ -87,6 +88,59 @@ def public_article(article_id: int, db: Session = Depends(get_db), _: User = Dep
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在或未发布")
     return success(data=ArticleResponse.model_validate(article).model_dump(mode="json"))
+
+
+@router.post("/import", summary="导入文档创建文章（支持 PDF / Word docx / TXT / Markdown，发布状态自动入库）")
+async def import_document(
+    file: UploadFile,
+    category_id: int = Form(default=None),
+    status: str = Form(default="published"),
+    tags: str = Form(default=""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_editor),
+):
+    if status not in ("draft", "published"):
+        raise HTTPException(status_code=400, detail="status 仅支持 draft / published")
+    filename = file.filename or ""
+    if not filename.lower().endswith(ALLOWED_EXTENSIONS):
+        raise HTTPException(status_code=400, detail=f"仅支持 {' / '.join(ALLOWED_EXTENSIONS)} 文件")
+
+    raw = await file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小不能超过 20MB")
+
+    try:
+        content = extract_text(filename, raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("解析文档失败: %s", filename)
+        raise HTTPException(status_code=400, detail="文档解析失败，文件可能已损坏或为扫描件")
+
+    content = content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="未能从文档中提取到文本内容（扫描版 PDF 不支持）")
+
+    title = filename.rsplit(".", 1)[0]
+    if category_id and not db.query(Category).filter(Category.id == category_id).first():
+        raise HTTPException(status_code=400, detail="分类不存在")
+
+    article = Article(
+        title=title,
+        content=content,
+        category_id=category_id or None,
+        editor_id=current_user.id,
+        tags=tags or None,
+        status=status,
+    )
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+    _sync_vector(article)
+    return success(
+        data={"id": article.id, "title": article.title, "chars": len(content)},
+        message=f"导入成功，共提取 {len(content)} 字" + ("，已向量化入库" if status == "published" else ""),
+    )
 
 
 @router.get("/{article_id}", summary="文章详情（编辑/管理员，含草稿）")

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiFetch } from '../../api/request'
+import { apiFetch, uploadFile } from '../../api/request'
 
 const router = useRouter()
 const items = ref([])
@@ -10,6 +10,8 @@ const page = ref(1)
 const pageSize = 10
 const search = ref('')
 const status = ref('')
+const importing = ref(false)
+const fileInput = ref(null)
 
 async function load() {
   const data = await apiFetch(
@@ -17,6 +19,22 @@ async function load() {
   )
   items.value = data.items
   total.value = data.total
+}
+
+async function onImportFile(e) {
+  const file = e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const res = await uploadFile('/api/articles/import', file, { status: 'published' })
+    alert(res.message)
+    load()
+  } catch (err) {
+    alert(`导入失败：${err.message}`)
+  } finally {
+    importing.value = false
+  }
 }
 
 async function togglePublish(a) {
@@ -36,7 +54,13 @@ onMounted(load)
 <template>
   <div class="page-header">
     <h2>📝 文章管理</h2>
-    <button class="btn primary" @click="router.push('/admin/articles/new')">＋ 新建文章</button>
+    <div style="display:flex; gap:10px">
+      <button class="btn" :disabled="importing" @click="fileInput.click()">
+        {{ importing ? '导入中...' : '📥 导入文档' }}
+      </button>
+      <input ref="fileInput" type="file" hidden accept=".pdf,.docx,.txt,.md,.markdown" @change="onImportFile" />
+      <button class="btn primary" @click="router.push('/admin/articles/new')">＋ 新建文章</button>
+    </div>
   </div>
 
   <div class="card">

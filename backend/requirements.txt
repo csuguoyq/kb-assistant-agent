@@ -9,6 +9,8 @@ python-dotenv==1.0.1
 pydantic[email]==2.10.4
 python-multipart==0.0.20
 aiosqlite==0.20.0
+pypdf>=5.0.0
+python-docx>=1.1.0
 chromadb==0.5.23
 openai>=1.59.6
 langgraph==1.2.19
