@@ -1,8 +1,15 @@
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
+import { marked } from 'marked'
 import { streamChat, apiFetch } from '../../api/request'
 import { useAuth } from '../../composables/useAuth'
 import { useChatStore } from '../../composables/useChat'
+
+marked.setOptions({ breaks: true })
+
+function renderMd(text) {
+  return marked.parse(text || '')
+}
 
 const auth = useAuth()
 const store = useChatStore()
@@ -85,7 +92,9 @@ onMounted(async () => {
         <div v-for="(m, i) in messages" :key="i" :class="['msg', m.role]">
           <div class="avatar">{{ m.role === 'user' ? '👤' : '🤖' }}</div>
           <div class="bubble">
-            <div class="content">{{ m.content }}<span v-if="sending && i === messages.length - 1 && m.role === 'assistant'" class="cursor">▍</span></div>
+            <div v-if="m.role === 'assistant'" class="content md" v-html="renderMd(m.content)"></div>
+            <div v-else class="content">{{ m.content }}<span v-if="sending && i === messages.length - 1" class="cursor">▍</span></div>
+            <div v-if="m.role === 'assistant' && !m.content" class="content typing">正在思考…</div>
             <div v-if="m.sources && m.sources.length" class="sources">
               <div class="sources-title">📎 引用来源</div>
               <div v-for="s in m.sources" :key="s.article_id" class="source-item" @click="goArticle(s.article_id)">
@@ -120,6 +129,30 @@ onMounted(async () => {
 .bubble { max-width: 72%; background: var(--bg); border-radius: 12px; padding: 12px 16px; line-height: 1.7; white-space: pre-wrap; }
 .msg.user .bubble { background: #eef1fe; }
 .cursor { animation: blink 1s infinite; color: var(--primary); }
+.typing { color: var(--text-light); }
+.content.md { white-space: normal; }
+.content.md >>> :first-child { margin-top: 0; }
+.content.md >>> :last-child { margin-bottom: 0; }
+.content.md >>> h1, .content.md >>> h2, .content.md >>> h3, .content.md >>> h4 {
+  font-size: 15px; margin: 10px 0 6px;
+}
+.content.md >>> p { margin: 6px 0; }
+.content.md >>> ul, .content.md >>> ol { padding-left: 20px; margin: 6px 0; }
+.content.md >>> li { margin: 3px 0; }
+.content.md >>> code {
+  background: rgba(79,110,247,.1); border-radius: 4px; padding: 1px 5px; font-size: 13px;
+}
+.content.md >>> pre {
+  background: #1e2433; color: #e6e9f2; border-radius: 8px; padding: 10px 12px;
+  overflow-x: auto; margin: 8px 0;
+}
+.content.md >>> pre code { background: transparent; padding: 0; }
+.content.md >>> table { border-collapse: collapse; margin: 8px 0; }
+.content.md >>> th, .content.md >>> td { border: 1px solid var(--border); padding: 4px 10px; font-size: 13px; }
+.content.md >>> blockquote {
+  border-left: 3px solid var(--primary); color: var(--text-light);
+  padding-left: 10px; margin: 6px 0;
+}
 @keyframes blink { 50% { opacity: 0; } }
 
 .sources { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 8px; }
