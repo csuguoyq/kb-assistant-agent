@@ -53,6 +53,7 @@ class ArticleListItem(BaseModel):
     id: int
     title: str
     category_id: Optional[int] = None
+    category_name: Optional[str] = None
     editor_id: int
     status: str
     tags: Optional[str] = None

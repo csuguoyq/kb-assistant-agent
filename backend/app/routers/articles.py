@@ -31,6 +31,12 @@ def _sync_vector(article: Article) -> None:
         logger.exception("向量库同步失败（文章 %s），不影响文章保存", article.id)
 
 
+def _list_item(a: Article) -> dict:
+    item = ArticleListItem.model_validate(a).model_dump(mode="json")
+    item["category_name"] = a.category.name if a.category else None
+    return item
+
+
 @router.get("", summary="文章列表（编辑/管理员），支持分页与标题搜索")
 def list_articles(
     page: int = Query(1, ge=1),
@@ -54,7 +60,7 @@ def list_articles(
     )
     return success(data={
         "total": total,
-        "items": [ArticleListItem.model_validate(a).model_dump(mode="json") for a in articles],
+        "items": [_list_item(a) for a in articles],
     })
 
 
@@ -78,7 +84,7 @@ def public_articles(
     )
     return success(data={
         "total": total,
-        "items": [ArticleListItem.model_validate(a).model_dump(mode="json") for a in articles],
+        "items": [_list_item(a) for a in articles],
     })
 
 

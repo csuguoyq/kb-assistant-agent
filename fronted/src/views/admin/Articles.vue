@@ -12,6 +12,8 @@ const search = ref('')
 const status = ref('')
 const importing = ref(false)
 const fileInput = ref(null)
+const categories = ref([])
+const importModal = ref(false)   // { file, category_id, status }
 
 async function load() {
   const data = await apiFetch(
@@ -21,13 +23,22 @@ async function load() {
   total.value = data.total
 }
 
-async function onImportFile(e) {
+function onImportFile(e) {
   const file = e.target.files[0]
   e.target.value = ''
   if (!file) return
+  importModal.value = { file, category_id: null, status: 'published' }
+}
+
+async function confirmImport() {
+  const m = importModal.value
+  if (!m) return
   importing.value = true
   try {
-    const res = await uploadFile('/api/articles/import', file, { status: 'published' })
+    const fields = { status: m.status }
+    if (m.category_id) fields.category_id = m.category_id
+    const res = await uploadFile('/api/articles/import', m.file, fields)
+    importModal.value = false
     alert(res.message)
     load()
   } catch (err) {
@@ -48,7 +59,10 @@ async function remove(a) {
   load()
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  apiFetch('/api/categories').then((c) => { categories.value = c })
+})
 </script>
 
 <template>
@@ -75,10 +89,11 @@ onMounted(load)
 
     <div v-if="items.length === 0" class="empty">暂无文章，点击右上角新建</div>
     <table v-else class="table">
-      <thead><tr><th>标题</th><th>状态</th><th>标签</th><th>更新时间</th><th style="width:230px">操作</th></tr></thead>
+      <thead><tr><th>标题</th><th>分类</th><th>状态</th><th>标签</th><th>更新时间</th><th style="width:230px">操作</th></tr></thead>
       <tbody>
         <tr v-for="a in items" :key="a.id">
           <td>{{ a.title }}</td>
+          <td><span v-if="a.category_name" class="tag">{{ a.category_name }}</span><span v-else class="tag gray">未分类</span></td>
           <td><span :class="['tag', a.status === 'published' ? 'green' : 'gray']">{{ a.status === 'published' ? '已发布' : '草稿' }}</span></td>
           <td>{{ a.tags || '-' }}</td>
           <td>{{ (a.updated_at || '').slice(0, 10) }}</td>
@@ -96,4 +111,29 @@ onMounted(load)
       <button class="btn" :disabled="page >= Math.ceil(total / pageSize)" @click="page++; load()">下一页</button>
     </div>
   </div>
+
+  <div v-if="importModal" class="modal-mask" @click.self="importModal = false">
+    <div class="card modal">
+      <div class="page-header"><h3>导入文档</h3><button class="btn" @click="importModal = false">取消</button></div>
+      <p style="margin-bottom:12px">📄 {{ importModal.file.name }}（{{ Math.ceil(importModal.file.size / 1024) }} KB）</p>
+      <label style="display:block; margin-bottom:8px; color:var(--text-light)">所属分类</label>
+      <select v-model="importModal.category_id" class="input" style="margin-bottom:14px">
+        <option :value="null">未分类</option>
+        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+      <label style="display:block; margin-bottom:8px; color:var(--text-light)">导入后状态</label>
+      <select v-model="importModal.status" class="input" style="margin-bottom:18px">
+        <option value="published">发布（立即向量化入库，AI 可检索）</option>
+        <option value="draft">草稿（仅保存，不入库）</option>
+      </select>
+      <button class="btn primary" style="width:100%" :disabled="importing" @click="confirmImport">
+        {{ importing ? '导入中...' : '确认导入' }}
+      </button>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal { width: min(480px, 92vw); }
+</style>
