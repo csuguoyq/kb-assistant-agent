@@ -1,11 +1,15 @@
-"""RAG 服务：结构感知切片、向量化、Chroma 持久化与检索。
+"""RAG 服务：结构感知切片、向量化、混合检索（向量 + BM25）与重排序。
 
 切片策略：结构感知递归切分
 1. 按 Markdown 标题层级（#/##/###）切出章节，每个 Chunk 携带章节路径元数据
 2. 章节内按段落贪心装填（段落边界天然是切分点，重叠为零）
 3. 单段超长时按句子边界递归细分，相邻块保留约 15% 重叠（克制，防跨界信息丢失）
 
-检索策略：向量 Top-K + 相关性阈值过滤，剔除噪声切片后再送给生成模型。
+检索策略：混合检索
+1. 向量召回（BGE-m3 语义匹配）+ BM25 召回（关键词精确命中，专有名词/编号友好）
+2. RRF（Reciprocal Rank Fusion）融合两路排名
+3. BGE-reranker（硅基流动）对融合候选做精排
+4. 相关性阈值过滤剔除噪声后返回 Top-K
 """
 import hashlib
 import logging
@@ -15,7 +19,10 @@ import threading
 from typing import Optional
 
 import chromadb
+import httpx
+import jieba
 from openai import OpenAI
+from rank_bm25 import BM25Okapi
 
 from app.config import settings
 
@@ -205,42 +212,157 @@ def upsert_article(article_id: int, title: str, content: str,
         } for i, c in enumerate(chunks)],
     )
     logger.info("文章 %s 已结构化入库（%s 块）", article_id, len(chunks))
+    _invalidate_bm25()
     return len(chunks)
 
 
 def delete_article(article_id: int) -> None:
     _get_collection().delete(where={"article_id": article_id})
+    _invalidate_bm25()
+
+
+# ---------- BM25 关键词检索（混合检索的一路） ----------
+
+_bm25 = None          # BM25Okapi 实例
+_bm25_docs = None     # 与 BM25 语料对齐的 [{id, document, metadata}]
+_bm25_lock = threading.Lock()
+_bm25_dirty = True    # 文章增删改后置脏，下次检索时重建
+
+
+def _invalidate_bm25() -> None:
+    global _bm25_dirty
+    _bm25_dirty = True
+
+
+def tokenize_zh(text: str) -> list[str]:
+    """中文分词：jieba 切词 + 保留原文中的英文/数字串（专有名词、编号精确命中）。"""
+    return [t for t in jieba.lcut(text.lower()) if t.strip()]
+
+
+def _get_bm25():
+    """懒加载构建 BM25 索引（语料来自 Chroma 全量切片），脏标记触发重建。"""
+    global _bm25, _bm25_docs, _bm25_dirty
+    with _bm25_lock:
+        if _bm25 is not None and not _bm25_dirty:
+            return _bm25, _bm25_docs
+        col = _get_collection()
+        if col.count() == 0:
+            _bm25, _bm25_docs, _bm25_dirty = None, None, False
+            return None, None
+        data = col.get(include=["documents", "metadatas"])
+        _bm25_docs = [
+            {"id": id_, "document": doc, "metadata": meta}
+            for id_, doc, meta in zip(data["ids"], data["documents"], data["metadatas"])
+        ]
+        corpus = [tokenize_zh(d["document"]) for d in _bm25_docs]
+        _bm25 = BM25Okapi(corpus)
+        _bm25_dirty = False
+        return _bm25, _bm25_docs
+
+
+def bm25_search(query: str, fetch_k: int) -> list[dict]:
+    """BM25 关键词召回，返回与向量召回同构的 hit 列表（无 distance）。"""
+    bm25, docs = _get_bm25()
+    if bm25 is None:
+        return []
+    scores = bm25.get_scores(tokenize_zh(query))
+    ranked = sorted(range(len(docs)), key=lambda i: scores[i], reverse=True)[:fetch_k]
+    hits = []
+    for i in ranked:
+        if scores[i] <= 0:
+            continue
+        d = docs[i]
+        m = d["metadata"]
+        hits.append({
+            "article_id": m.get("article_id"),
+            "title": m.get("title", ""),
+            "category": m.get("category", ""),
+            "tags": m.get("tags", ""),
+            "section": m.get("section", ""),
+            "text": d["document"],
+            "distance": None,
+            "bm25_score": scores[i],
+        })
+    return hits
+
+
+# ---------- 重排序（硅基流动 BGE-reranker） ----------
+
+def rerank(query: str, hits: list[dict], top_k: int) -> list[dict]:
+    """调用 BGE-reranker 对候选精排；服务不可用时降级为原顺序。"""
+    if not settings.RERANK_MODEL or not settings.SILICONFLOW_API_KEY or not hits:
+        return hits[:top_k]
+    try:
+        resp = httpx.post(
+            f"{settings.SILICONFLOW_BASE_URL}/rerank",
+            headers={"Authorization": f"Bearer {settings.SILICONFLOW_API_KEY}"},
+            json={
+                "model": settings.RERANK_MODEL,
+                "query": query,
+                "documents": [h["text"] for h in hits],
+                "top_n": top_k,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        return [hits[r["index"]] | {"rerank_score": r["relevance_score"]} for r in results]
+    except Exception as e:
+        logger.warning("重排序失败，降级为 RRF 原顺序: %s", e)
+        return hits[:top_k]
 
 
 def search(query: str, top_k: int = None) -> list[dict]:
-    """语义检索 + 相关性阈值过滤。
+    """混合检索：向量 + BM25 召回 → RRF 融合 → reranker 精排 → 阈值过滤。
 
-    返回 [{article_id, title, category, tags, section, text, distance}]，
-    cosine distance 超过 MAX_DISTANCE 的切片视为噪声剔除。
+    返回 [{article_id, title, category, tags, section, text, distance}]。
     """
     top_k = top_k or settings.RAG_TOP_K
+    fetch_k = max(settings.HYBRID_FETCH_K, top_k)
     col = _get_collection()
     if col.count() == 0:
         return []
 
+    # ① 向量召回
     result = col.query(
         query_embeddings=[_embed_query(query)],
-        n_results=min(top_k, col.count()),
+        n_results=min(fetch_k, col.count()),
         include=["documents", "metadatas", "distances"],
     )
-    hits = []
+    vec_hits = []
     for doc, meta, dist in zip(
         result["documents"][0], result["metadatas"][0], result["distances"][0]
     ):
-        if dist > MAX_DISTANCE:
-            continue  # 阈值过滤：不相关的切片不送给生成模型
-        hits.append({
-            "article_id": meta.get("article_id"),
-            "title": meta.get("title", ""),
-            "category": meta.get("category", ""),
-            "tags": meta.get("tags", ""),
-            "section": meta.get("section", ""),
-            "text": doc,
-            "distance": dist,
-        })
-    return hits
+        if dist <= MAX_DISTANCE:  # 阈值过滤：不相关的切片不进入候选
+            vec_hits.append(_hit_from(doc, meta, dist))
+
+    # ② BM25 关键词召回
+    kw_hits = bm25_search(query, fetch_k)
+
+    # ③ RRF 融合两路排名（常数 60 为论文经验值）
+    K = 60
+    fused: dict[str, dict] = {}
+    for rank, hit in enumerate(vec_hits):
+        key = f"a{hit['article_id']}_{hit['text'][:32]}"
+        entry = fused.setdefault(key, {"hit": hit, "score": 0.0})
+        entry["score"] += 1.0 / (K + rank + 1)
+    for rank, hit in enumerate(kw_hits):
+        key = f"a{hit['article_id']}_{hit['text'][:32]}"
+        entry = fused.setdefault(key, {"hit": hit, "score": 0.0})
+        entry["score"] += 1.0 / (K + rank + 1)
+    candidates = [e["hit"] for e in sorted(fused.values(), key=lambda e: -e["score"])]
+
+    # ④ 重排序精排（失败自动降级为 RRF 顺序）
+    return rerank(query, candidates, top_k)
+
+
+def _hit_from(doc: str, meta: dict, dist: float) -> dict:
+    return {
+        "article_id": meta.get("article_id"),
+        "title": meta.get("title", ""),
+        "category": meta.get("category", ""),
+        "tags": meta.get("tags", ""),
+        "section": meta.get("section", ""),
+        "text": doc,
+        "distance": dist,
+    }

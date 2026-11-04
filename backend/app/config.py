@@ -37,6 +37,10 @@ class Settings:
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "4"))
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "50"))
+    # 混合检索：向量与 BM25 各自召回的候选数（RRF 融合后再重排序）
+    HYBRID_FETCH_K: int = int(os.getenv("HYBRID_FETCH_K", "10"))
+    # 重排序：硅基流动 BGE-reranker（模型为空则跳过重排序）
+    RERANK_MODEL: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
     @property
     def is_sqlite(self) -> bool:
