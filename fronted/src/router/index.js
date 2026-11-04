@@ -40,7 +40,8 @@ router.beforeEach(async (to) => {
   const auth = useAuth()
   if (!auth.state.ready) await auth.restoreSession()
   if (!auth.isLoggedIn()) {
-    return to.path === '/login' ? true : { path: '/login', query: { redirect: to.fullPath } }
+    if (to.path === '/login' || to.path === '/register') return true
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
   if (to.path === '/login' || to.path === '/register') return auth.homePath()
   if (to.meta.requiresEditor && !auth.isEditor()) return '/user/chat'
