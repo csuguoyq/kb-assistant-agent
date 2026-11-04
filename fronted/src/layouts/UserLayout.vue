@@ -23,6 +23,12 @@ const navGroups = [
 
 const adminNav = [
   {
+    label: '智能问答',
+    items: [
+      { path: '/user/chat', icon: '🤖', label: 'AI 问答' },
+    ],
+  },
+  {
     label: '知识管理',
     items: [
       { path: '/admin/dashboard', icon: '📊', label: '概览' },
