@@ -34,6 +34,8 @@ def build_context_block(hits: list[dict]) -> str:
         meta = []
         if hit.get("category"):
             meta.append(f"分类：{hit['category']}")
+        if hit.get("section"):
+            meta.append(f"章节：{hit['section']}")
         if hit.get("tags"):
             meta.append(f"标签：{hit['tags']}")
         meta_str = f"（{'，'.join(meta)}）" if meta else ""
