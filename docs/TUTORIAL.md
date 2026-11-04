@@ -377,9 +377,10 @@ def build_context_block(hits):
 def search_knowledge_base(query: str, top_k: int = 4) -> str:
     """在公司知识库中进行语义检索。凡涉及公司制度、流程、产品等内部知识的问题，必须先调用本工具。"""
     hits = rag.search(query, top_k)
-    _record_sources(hits)          # 顺手把命中记进 contextvars，回答完返回给前端做引用
-    return build_context_block(hits)
+    return build_context_block(hits)   # 编号化的上下文块，模型据此标注 [n] 引用
 ```
+
+> 注意：不要在工具里用 contextvars 收集检索命中——LangGraph 在线程池执行同步工具，子线程对 ContextVar 的写不会传回主线程。本项目改为路由层解析工具输出文本中的 "[n] 《标题》" 来收集来源。
 
 **LangGraph 把"模型↔工具循环"画成图**（`agent/graph.py`）：
 

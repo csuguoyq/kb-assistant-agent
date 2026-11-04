@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agent.graph import kb_graph
-from app.agent.tools import sources_collector
+from app.models.article import Article
 from app.database import get_db, SessionLocal
 from app.models.chat import ChatSession, ChatMessage
 from app.models.user import User
@@ -72,21 +73,22 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
         except Exception:
             logger.exception("预检索失败（Embedding 服务不可用？），降级为纯对话")
             hits = []
-        # 按文章去重（同一篇文章可能命中多个分块），保留最先命中的片段作为摘要
-        seen_ids = set()
+        # 来源收集：按文章去重，编号即列表序号（1-based）。
+        # 预检索占据 [1..n]；Agent 工具命中的新文章从工具输出解析追加（编号顺延）
         sources = []
+        seen_titles = set()
         for h in hits:
-            if h["article_id"] in seen_ids:
+            if h["title"] in seen_titles:
                 continue
-            seen_ids.add(h["article_id"])
+            seen_titles.add(h["title"])
             sources.append({
                 "article_id": h["article_id"],
                 "title": h["title"],
                 "snippet": h["text"][:120],
             })
-        sources_collector.set(sources)
-
-        context_message = SystemMessage(content=build_context_block(hits)) if hits else None
+        context_message = (
+            SystemMessage(content=build_context_block(hits, start_index=1)) if hits else None
+        )
         config = {"configurable": {"thread_id": session_id, "user_id": current_user.id}}
         answer_parts = []
         try:
@@ -107,18 +109,45 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
                             answer_parts.append(text)
                             yield f"data: {json.dumps({'type': 'chunk', 'content': text}, ensure_ascii=False)}\n\n"
                     continue
-                # mode == "updates"：工具节点被执行时向前端广播检索状态
+                # mode == "updates"：广播工具调用状态，并从工具输出解析新命中的文章
                 for node_name, update in data.items():
-                    if node_name == "tools":
-                        for msg in update.get("messages", []):
-                            if isinstance(msg, ToolMessage):
-                                yield f"data: {json.dumps({'type': 'tool', 'name': msg.name}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'sources', 'items': sources}, ensure_ascii=False)}\n\n"
+                    if node_name != "tools":
+                        continue
+                    for msg in update.get("messages", []):
+                        if not isinstance(msg, ToolMessage):
+                            continue
+                        yield f"data: {json.dumps({'type': 'tool', 'name': msg.name}, ensure_ascii=False)}\n\n"
+                        content = msg.content if isinstance(msg.content, str) else ""
+                        for _n, title in re.findall(r"\[(\d+)\] 《(.+?)》", content):
+                            if title not in seen_titles:
+                                seen_titles.add(title)
+                                sources.append({"article_id": None, "title": title, "snippet": ""})
+
+            answer = "".join(answer_parts)
+            # 把解析出的标题补全为 article_id（工具输出只有标题）
+            if any(s["article_id"] is None for s in sources):
+                db = SessionLocal()
+                try:
+                    for s in sources:
+                        if s["article_id"] is None:
+                            row = db.query(Article).filter(Article.title == s["title"]).first()
+                            s["article_id"] = row.id if row else None
+                finally:
+                    db.close()
+            sources = [s for s in sources if s["article_id"] is not None]
+
+            # 只保留 LLM 实际引用的来源：从回答解析 [n]，无效编号回退为全部命中
+            total = len(sources)
+            cited = {int(m) for m in re.findall(r"\[(\d{1,2})\]", answer) if int(m) <= total}
+            used_sources = (
+                [s for i, s in enumerate(sources, 1) if i in cited] if cited else list(sources)
+            )
+            yield f"data: {json.dumps({'type': 'sources', 'items': used_sources}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 
             db = SessionLocal()
             try:
-                _save_message(db, session_id, "assistant", "".join(answer_parts), sources)
+                _save_message(db, session_id, "assistant", answer, used_sources)
             finally:
                 db.close()
         except Exception as e:
