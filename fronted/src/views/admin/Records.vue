@@ -7,10 +7,15 @@ marked.setOptions({ breaks: true })
 const renderMd = (t) => marked.parse(t || '')
 
 const records = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 10
 const detail = ref(null)
 
 async function load() {
-  records.value = await apiFetch('/api/chat/records')
+  const data = await apiFetch(`/api/chat/records?page=${page.value}&page_size=${pageSize}`)
+  records.value = data.items
+  total.value = data.total
 }
 
 async function open(r) {
@@ -31,25 +36,48 @@ onMounted(load)
           <td style="cursor:pointer" @click="open(r)">{{ r.title || '（无标题）' }}</td>
           <td>{{ r.message_count }}</td>
           <td>{{ (r.created_at || '').slice(0, 19).replace('T', ' ') }}</td>
-          <td><button class="btn" @click="open(r)">查看</button></td>
+          <td><button class="btn" @click="open(r)">查看详情</button></td>
         </tr>
       </tbody>
     </table>
+    <div class="pagination">
+      <button class="btn" :disabled="page <= 1" @click="page--; load()">上一页</button>
+      <span>{{ page }} / {{ Math.ceil(total / pageSize) || 1 }}（共 {{ total }} 条）</span>
+      <button class="btn" :disabled="page >= Math.ceil(total / pageSize)" @click="page++; load()">下一页</button>
+    </div>
   </div>
-  <div v-if="detail" class="card" style="margin-top:16px; max-width: 900px;">
-    <h3 style="margin-bottom:12px">会话详情</h3>
-    <div v-for="(m, i) in detail" :key="i" style="margin-bottom:12px; line-height:1.7">
-      <b>{{ m.role === 'user' ? '👤 提问' : '🤖 回答' }}：</b>
-      <span v-if="m.role === 'assistant'" class="md" v-html="renderMd(m.content)"></span>
-      <span v-else>{{ m.content }}</span>
-      <div v-if="m.sources && m.sources.length" style="font-size:12px; color:var(--text-light); margin-top:4px">
-        引用：{{ m.sources.map(s => `《${s.title}》`).join('、') }}
+
+  <div v-if="detail" class="modal-mask" @click.self="detail = null">
+    <div class="card modal">
+      <div class="page-header">
+        <h3>会话详情</h3>
+        <button class="btn" @click="detail = null">关闭</button>
+      </div>
+      <div class="detail-body">
+        <div v-for="(m, i) in detail" :key="i" class="msg">
+          <div class="msg-role">{{ m.role === 'user' ? '👤 提问' : '🤖 回答' }}</div>
+          <div class="msg-content">
+            <span v-if="m.role === 'assistant'" class="md" v-html="renderMd(m.content)"></span>
+            <span v-else>{{ m.content }}</span>
+            <div v-if="m.sources && m.sources.length" class="sources-line">
+              引用：{{ m.sources.map(s => `《${s.title}》`).join('、') }}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal { width: min(760px, 92vw); max-height: 82vh; display: flex; flex-direction: column; }
+.detail-body { overflow-y: auto; }
+.msg { margin-bottom: 16px; }
+.msg-role { font-weight: 600; margin-bottom: 4px; }
+.msg-content { line-height: 1.7; padding-left: 2px; }
+.sources-line { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+
 .md { white-space: normal; }
 .md :deep(h1), .md :deep(h2), .md :deep(h3) { font-size: 15px; margin: 8px 0 4px; }
 .md :deep(p) { margin: 4px 0; }

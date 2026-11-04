@@ -167,11 +167,21 @@ def delete_session(session_id: str, current_user: User = Depends(get_current_use
 
 
 @router.get("/records", summary="问答记录查看（编辑/管理员，用于运营分析）")
-def all_records(db: Session = Depends(get_db), _: User = Depends(get_current_editor)):
-    sessions = db.query(ChatSession).order_by(ChatSession.created_at.desc()).limit(100).all()
-    return success(data=[{
-        "session_id": s.id,
-        "title": s.title,
-        "created_at": s.created_at.isoformat() if s.created_at else None,
-        "message_count": len(s.messages),
-    } for s in sessions])
+def all_records(
+    page: int = 1,
+    page_size: int = 10,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_editor),
+):
+    query = db.query(ChatSession).order_by(ChatSession.created_at.desc())
+    total = query.count()
+    sessions = query.offset((page - 1) * page_size).limit(page_size).all()
+    return success(data={
+        "total": total,
+        "items": [{
+            "session_id": s.id,
+            "title": s.title,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "message_count": len(s.messages),
+        } for s in sessions],
+    })
