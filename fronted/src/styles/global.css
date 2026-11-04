@@ -76,3 +76,11 @@ a { color: var(--primary); text-decoration: none; }
 .page-header h2 { font-size: 20px; }
 
 .empty { text-align: center; color: var(--text-light); padding: 40px 0; }
+
+/* 响应式：窄屏适配 */
+@media (max-width: 768px) {
+  .card { padding: 14px; overflow-x: auto; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .table { min-width: 560px; }
+  .pagination { justify-content: center; }
+}

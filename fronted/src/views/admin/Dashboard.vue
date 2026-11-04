@@ -45,6 +45,7 @@ onMounted(async () => {
 
 <style scoped>
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+@media (max-width: 768px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 .stat { text-align: center; color: var(--text-light); }
 .num { font-size: 28px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
 </style>
