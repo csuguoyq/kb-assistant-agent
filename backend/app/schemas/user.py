@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -24,7 +25,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: Optional[str] = None
     role: str
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class Token(BaseModel):
