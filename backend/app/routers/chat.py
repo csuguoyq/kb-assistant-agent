@@ -72,11 +72,18 @@ def ask(payload: ChatRequest, current_user: User = Depends(get_current_user)):
         except Exception:
             logger.exception("预检索失败（Embedding 服务不可用？），降级为纯对话")
             hits = []
-        sources = [{
-            "article_id": h["article_id"],
-            "title": h["title"],
-            "snippet": h["text"][:120],
-        } for h in hits]
+        # 按文章去重（同一篇文章可能命中多个分块），保留最先命中的片段作为摘要
+        seen_ids = set()
+        sources = []
+        for h in hits:
+            if h["article_id"] in seen_ids:
+                continue
+            seen_ids.add(h["article_id"])
+            sources.append({
+                "article_id": h["article_id"],
+                "title": h["title"],
+                "snippet": h["text"][:120],
+            })
         sources_collector.set(sources)
 
         context_message = SystemMessage(content=build_context_block(hits)) if hits else None
